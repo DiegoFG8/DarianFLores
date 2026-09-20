@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Árbol de amor para Darían</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+  /* Escena nocturna: se mantiene oscura en cualquier tema, a propósito. */
+  :root {
+    color-scheme: dark;
+    --bg: #050505;
+    --ink: #f6e7b4;
+    --ink-soft: rgba(214, 190, 120, .62);
+    --gold: #ffd23f;
+    --card-bg: rgba(18, 13, 5, .8);
+    --card-border: rgba(190, 150, 50, .7);
+    --font: 'Lora', Georgia, 'Times New Roman', serif;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); background: var(--bg); }
+  body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- Pantalla inicial ---------- */
+  #start {
+    position: fixed; left: 50%; top: 46%;
+    transform: translate(-50%, -50%);
+    width: min(88vw, 420px);
+    padding: 40px 30px;
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+    background: none; border: 0; cursor: pointer;
+    font: italic 400 clamp(21px, 6.2vw, 28px)/1.3 var(--font);
+    color: #cdb87e; text-align: center;
+    z-index: 5;
+    transition: opacity .6s ease;
+  }
+  #start:focus-visible { outline: 2px solid var(--gold); outline-offset: 6px; border-radius: 24px; }
+  #start .label { max-width: 9.5em; text-wrap: balance; transition: opacity .5s ease; }
+  #start.go .label { opacity: 0; }
+  #seed {
+    display: block; font-style: normal; line-height: 1;
+    font-size: clamp(64px, 19vw, 92px);
+    animation: glow 3s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+  @keyframes glow {
+    0%, 100% { filter: drop-shadow(0 0 14px rgba(255, 190, 40, .55)); }
+    50%      { filter: drop-shadow(0 0 30px rgba(255, 205, 60, .95)); }
+  }
+
+  /* ---------- Texto que se escribe ---------- */
+  #typed {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    top: calc(env(safe-area-inset-top, 0px) + 10%);
+    width: min(88vw, 520px);
+    display: flex; align-items: flex-start; gap: 14px;
+    font-style: italic; font-size: clamp(18px, 5vw, 23px); line-height: 1.5;
+    color: var(--ink);
+    opacity: 0; transition: opacity .7s ease;
+    pointer-events: none; z-index: 3;
+  }
+  #typed.on { opacity: 1; }
+  #typed .sun {
+    font-style: normal; font-size: .95em; margin-top: .1em;
+    filter: drop-shadow(0 0 6px rgba(255, 200, 60, .6));
+  }
+  .caret {
+    display: inline-block; width: 2px; height: 1.05em; margin-left: 3px;
+    background: var(--gold); vertical-align: -.15em;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- Tarjeta de mensaje ---------- */
+  #card {
+    position: fixed; z-index: 4;
+    width: max-content;
+    padding: 20px 22px; border-radius: 26px;
+    background: var(--card-bg);
+    border: 1.5px solid var(--card-border);
+    box-shadow: 0 0 30px rgba(255, 190, 40, .18), inset 0 0 20px rgba(255, 190, 40, .06);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    color: var(--ink);
+    font-style: italic; font-size: clamp(18px, 5vw, 22px); line-height: 1.55;
+    text-align: center; text-wrap: balance;
+    opacity: 0; transform: translateY(10px) scale(.94);
+    transition: opacity .7s ease, transform .7s cubic-bezier(.2, .8, .2, 1);
+    pointer-events: none;
+  }
+  #card.show { opacity: 1; transform: none; }
+
+  /* ---------- Pista inferior ---------- */
+  #tap-hint {
+    position: fixed; left: 0; right: 0; margin: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 9%);
+    text-align: center; padding: 0 24px;
+    font-style: italic; font-size: clamp(18px, 5vw, 24px); line-height: 1.35;
+    color: var(--ink-soft);
+    opacity: 0; transition: opacity 1.4s ease;
+    pointer-events: none; z-index: 3;
+  }
+  #tap-hint.on { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #seed { animation: none; filter: drop-shadow(0 0 20px rgba(255, 195, 50, .8)); }
+    .caret { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c" aria-hidden="true"></canvas>
+
+<div id="typed" aria-live="polite">
+  <span class="sun" aria-hidden="true">🌻</span>
+  <span><span id="tt"></span><span class="caret" aria-hidden="true"></span></span>
+</div>
+
+<div id="card" role="status"></div>
+
+<button id="start" type="button" aria-label="Toca la flor para comenzar">
+  <span id="seed" aria-hidden="true">🌻</span>
+  <span class="label">Toca la flor para comenzar</span>
+</button>
+
+<p id="tap-hint">Toca la pantalla para llenarla de amor ✨</p>
+
+<script>
+(() => {
+  'use strict';
+
+  /* =====================================================
+     PERSONALIZA AQUÍ: el nombre y los mensajes
+     ===================================================== */
+  const NAME = 'Darían';
+
+  // Texto que se escribe arriba, letra por letra
+  const TYPED = [
+    'Si tuviera que elegir una flor para ti, elegiría un girasol.',
+    'Porque, como ellos, siempre encuentras la luz… y la compartes.',
+    `Este árbol florece por ti, ${NAME}.`,
+    'Cada flor es una razón por la que te quiero.',
+    'Gracias por existir en mi mundo. 💛'
+  ];
+
+  // Tarjetas que aparecen junto al árbol
+  const CARDS = [
+    'Eres la persona que hace mi mundo más bonito.',
+    'Contigo, hasta los días grises tienen color.',
+    'Tu sonrisa es mi lugar favorito.',
+    'Eres mi girasol: siempre tan luminoso.',
+    'Gracias por existir en mi vida.',
+    'Cada día a tu lado es un regalo.',
+    `${NAME}, este árbol crece porque tú existes.`,
+    'Te quiero más de lo que estas flores pueden contar.'
+  ];
+  /* ===================================================== */
+
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d');
+  const startBtn = $('start'), seed = $('seed'), typedEl = $('typed'), tt = $('tt'),
+        card = $('card'), tapHint = $('tap-hint');
+
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const easeInOut = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const easeOutBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+
+  /* ---------- Forma de corazón (normalizada: ancho = 1) ---------- */
+  const B = [];
+  let hR = 0;
+  {
+    const pts = [];
+    for (let i = 0; i < 260; i++) {
+      const t = i / 260 * Math.PI * 2;
+      pts.push([
+        16 * Math.pow(Math.sin(t), 3),
+        -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))
+      ]);
+    }
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const sc = 1 / (maxX - minX);
+    pts.forEach(([x, y]) => B.push([(x - (minX + maxX) / 2) * sc, (y - minY) * sc]));
+    hR = (maxY - minY) * sc;
+  }
+  const C = [0, hR * 0.4]; // centro desde donde se rellena
+
+  /* ---------- Sprites pre-renderizados ---------- */
+  const PALETTES = [
+    { a: '#fff4b0', b: '#ffe062', n: 10, w: .22, off: 0 },
+    { a: '#ffe87a', b: '#ffc928', n: 9,  w: .24, off: .3 },
+    { a: '#fff9d0', b: '#ffd94d', n: 11, w: .20, off: .1 },
+    { a: '#ffd84a', b: '#f5a90f', n: 9,  w: .25, off: .5 },
+    { a: '#fff0a0', b: '#ffcf33', n: 12, w: .18, off: .2 }
+  ];
+
+  function flowerSprite(res, pal) {
+    const c = mkCanvas(res, res), g = c.getContext('2d'), m = res / 2, reach = res * .34;
+    g.translate(m, m);
+    g.shadowColor = 'rgba(255,196,40,.85)';
+    g.shadowBlur = res * .07;
+    for (let i = 0; i < pal.n; i++) {
+      g.save();
+      g.rotate(i / pal.n * Math.PI * 2 + pal.off);
+      const gr = g.createLinearGradient(0, -reach * .2, 0, -reach);
+      gr.addColorStop(0, pal.a); gr.addColorStop(1, pal.b);
+      g.fillStyle = gr;
+      g.beginPath();
+      g.ellipse(0, -reach * .62, reach * pal.w, reach * .4, 0, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
+    g.shadowBlur = 0;
+    const cr = reach * .32;
+    const cg = g.createRadialGradient(0, -cr * .2, cr * .1, 0, 0, cr);
+    cg.addColorStop(0, '#8b5a1c'); cg.addColorStop(.6, '#4a2a0c'); cg.addColorStop(1, '#2e1706');
+    g.fillStyle = cg;
+    g.beginPath(); g.arc(0, 0, cr, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(224,160,50,.55)'; g.lineWidth = res * .012; g.stroke();
+    g.fillStyle = 'rgba(214,150,50,.7)';
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.4, r = cr * .55 * Math.sqrt((i + 1) / 7);
+      g.beginPath(); g.arc(Math.cos(a) * r, Math.sin(a) * r, res * .008, 0, Math.PI * 2); g.fill();
+    }
+    return c;
+  }
+
+  function heartSprite(res, c1, c2) {
+    const c = mkCanvas(res, res), g = c.getContext('2d'), m = res / 2, s = res * .021;
+    g.shadowColor = 'rgba(255,190,40,.9)'; g.shadowBlur = res * .08;
+    const gr = g.createLinearGradient(0, m - res * .3, 0, m + res * .3);
+    gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+    g.fillStyle = gr;
+    g.beginPath();
+    for (let i = 0; i <= 80; i++) {
+      const t = i / 80 * Math.PI * 2;
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      const X = m + x * s, Y = m + (y - 2.8) * s;
+      i ? g.lineTo(X, Y) : g.moveTo(X, Y);
+    }
+    g.closePath(); g.fill();
+    return c;
+  }
+
+  function sparkSprite(res) {
+    const c = mkCanvas(res, res), g = c.getContext('2d'), m = res / 2, r = res * .3, k = r * .16;
+    g.shadowColor = 'rgba(255,215,90,1)'; g.shadowBlur = res * .12;
+    g.fillStyle = '#fff6c8';
+    g.beginPath();
+    g.moveTo(m, m - r);
+    g.quadraticCurveTo(m + k, m - k, m + r, m);
+    g.quadraticCurveTo(m + k, m + k, m, m + r);
+    g.quadraticCurveTo(m - k, m + k, m - r, m);
+    g.quadraticCurveTo(m - k, m - k, m, m - r);
+    g.fill();
+    return c;
+  }
+
+  const FLOWERS = PALETTES.map(p => flowerSprite(128, p));
+  const HEARTS = [heartSprite(96, '#ffe27a', '#ffb92a'), heartSprite(96, '#fff0a8', '#ffd23f')];
+  const SPARK = sparkSprite(64);
+  const K_FLOWER = 1 / .68, K_HEART = 1 / .67, K_SPARK = 1 / .6;
+
+  /* ---------- Geometría (se recalcula al redimensionar) ---------- */
+  let W, H, DPR, S, cx, groundY, trunkH, tipY, heartTop;
+  let heartLayer = null, layerW = 0, layerH = 0, layerPad = 0;
+
+  function buildHeartLayer() {
+    layerPad = Math.ceil(S * .16);
+    layerW = Math.ceil(S + layerPad * 2);
+    layerH = Math.ceil(hR * S + layerPad * 2);
+    const c = mkCanvas(Math.round(layerW * DPR), Math.round(layerH * DPR));
+    const g = c.getContext('2d');
+    g.scale(DPR, DPR);
+    g.beginPath();
+    B.forEach(([x, y], i) => {
+      const X = layerPad + (x + .5) * S, Y = layerPad + y * S;
+      i ? g.lineTo(X, Y) : g.moveTo(X, Y);
+    });
+    g.closePath();
+    const gy = layerPad + C[1] * S;
+    const gr = g.createRadialGradient(layerW / 2, gy, S * .05, layerW / 2, gy, S * .6);
+    gr.addColorStop(0, 'rgba(255,214,70,.95)');
+    gr.addColorStop(.7, 'rgba(255,190,30,.9)');
+    gr.addColorStop(1, 'rgba(245,165,15,.85)');
+    g.fillStyle = gr;
+    g.shadowColor = 'rgba(255,196,50,.95)';
+    g.shadowBlur = S * .1 * DPR;
+    g.fill();
+    g.shadowBlur = S * .22 * DPR;
+    g.globalAlpha = .5;
+    g.fill();
+    heartLayer = c;
+  }
+
+  function layout() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    S = Math.min(W * .78, H * .40, 460);
+    cx = W / 2;
+    groundY = Math.round(H * .8);
+    trunkH = S * .34;
+    tipY = groundY - trunkH;
+    heartTop = tipY - hR * S;
+    buildHeartLayer();
+  }
+
+  /* ---------- Flores del árbol ---------- */
+  const flowers = [];
+  (function gen() {
+    const N = 560, EDGE = 130;
+    for (let i = 0; i < N; i++) {
+      const edge = i < EDGE;
+      const bi = edge
+        ? Math.floor((i / EDGE * B.length + rand(-2, 2) + B.length)) % B.length
+        : Math.floor(Math.random() * B.length);
+      const b = B[bi];
+      const r = edge ? rand(.86, 1.02) : Math.pow(Math.random(), .62) * .9;
+      const nx = C[0] + (b[0] - C[0]) * r;
+      const ny = C[1] + (b[1] - C[1]) * r;
+      flowers.push({
+        nx, ny,
+        size: edge ? rand(.075, .1) : rand(.05, .095),
+        rot: rand(0, Math.PI * 2),
+        img: FLOWERS[Math.floor(Math.random() * FLOWERS.length)],
+        alpha: edge ? rand(.85, 1) : .28 + .34 * r * r + rand(0, .12),
+        delay: ((hR - ny) / hR) * 2.6 + rand(0, .7),
+        ph: rand(0, 6.28), sp: rand(.8, 1.6)
+      });
+    }
+    flowers.sort((a, b) => a.alpha - b.alpha);
+  })();
+
+  const sparkles = Array.from({ length: 22 }, () => ({
+    nx: rand(-.62, .62), ny: rand(-.12, hR + .1),
+    size: rand(.03, .06), ph: rand(0, 6.28), sp: rand(1.2, 2.6)
+  }));
+
+  /* ---------- Partículas ---------- */
+  const parts = [];
+  function addPart(p) {
+    if (parts.length > 340) parts.splice(0, 20);
+    parts.push(p);
+  }
+  const flowerImg = () => FLOWERS[Math.floor(Math.random() * FLOWERS.length)];
+  const heartImg = () => HEARTS[Math.floor(Math.random() * HEARTS.length)];
+
+  function burst(x, y) {
+    const n = calm ? 6 : 12;
+    for (let i = 0; i < n; i++) {
+      const a = rand(-Math.PI * .95, -Math.PI * .05), sp = rand(90, 270);
+      const kind = i % 3;
+      const base = {
+        mode: 'burst', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        rot: rand(0, 6.28), vr: rand(-3, 3), age: 0, life: rand(2.4, 4.4), ph: rand(0, 6.28)
+      };
+      if (kind === 0) addPart({ ...base, img: flowerImg(), k: K_FLOWER, size: rand(16, 30) });
+      else if (kind === 1) addPart({ ...base, img: heartImg(), k: K_HEART, size: rand(12, 22), vr: rand(-1, 1) });
+      else addPart({ ...base, img: SPARK, k: K_SPARK, size: rand(14, 26), life: rand(.9, 1.8), vr: 0 });
+    }
+    if (!calm) {
+      for (let i = 0; i < 6; i++) {
+        addPart({
+          mode: 'rain', x: rand(0, W), y: rand(-60, -10),
+          vx: 0, vy: rand(60, 130), rot: rand(0, 6.28), vr: rand(-1.5, 1.5),
+          age: 0, life: 14, ph: rand(0, 6.28),
+          img: i % 3 === 0 ? heartImg() : flowerImg(),
+          k: i % 3 === 0 ? K_HEART : K_FLOWER, size: rand(14, 26)
+        });
+      }
+    }
+  }
+
+  function stepParticles(dt, now) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    let w = 0;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      p.age += dt;
+      let a = 1, dead = false, size = p.size;
+
+      switch (p.mode) {
+        case 'fall':
+          p.y += p.vy * dt;
+          p.x += Math.sin(p.age * 1.4 + p.ph) * 14 * dt;
+          p.rot += p.vr * dt;
+          if (p.y > groundY) {
+            p.vy *= Math.pow(.35, dt);
+            p.fade = (p.fade || 0) + dt / 4;
+            if (p.fade >= 1) dead = true;
+          }
+          a = p.a0 * (1 - (p.fade || 0));
+          break;
+        case 'ambient':
+          p.y += p.vy * dt;
+          p.x += Math.sin(p.age * 1.1 + p.ph) * 8 * dt;
+          p.rot += p.vr * dt;
+          if (p.age >= p.life) dead = true;
+          a = Math.sin(Math.PI * clamp(p.age / p.life)) * .6;
+          break;
+        case 'burst':
+          p.vy += 120 * dt;
+          p.vx *= Math.pow(.4, dt);
+          p.vy *= Math.pow(.7, dt);
+          p.x += p.vx * dt; p.y += p.vy * dt;
+          p.rot += p.vr * dt;
+          if (p.age >= p.life) dead = true;
+          a = clamp((p.life - p.age) / (p.life * .4));
+          if (p.img === SPARK) {
+            a *= .6 + .4 * Math.sin(p.age * 12 + p.ph);
+            size *= .6 + .4 * Math.sin(Math.PI * clamp(p.age / p.life));
+          }
+          break;
+        case 'rain':
+          p.y += p.vy * dt;
+          p.x += Math.sin(p.age * 1.3 + p.ph) * 22 * dt;
+          p.rot += p.vr * dt;
+          if (p.y > H + 30 || p.age > p.life) dead = true;
+          a = clamp((H - p.y) / (H * .18)) * clamp(p.age / .4);
+          break;
+      }
+      if (dead) continue;
+      parts[w++] = p;
+      if (a <= 0.003) continue;
+
+      const cs = Math.cos(p.rot) * DPR, sn = Math.sin(p.rot) * DPR, d = size * p.k;
+      ctx.setTransform(cs, sn, -sn, cs, p.x * DPR, p.y * DPR);
+      ctx.globalAlpha = a;
+      ctx.drawImage(p.img, -d / 2, -d / 2, d, d);
+    }
+    parts.length = w;
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- Dibujo del árbol ---------- */
+  let pulse = 0;
+  let phase = 'intro';           // intro → grow → live
+  let trunkStart = 0, bloomStart = 0;
+  const TRUNK_DUR = 2.3;
+
+  function blit(img, x, y, d, rot, alpha) {
+    const cs = Math.cos(rot) * DPR, sn = Math.sin(rot) * DPR;
+    ctx.setTransform(cs, sn, -sn, cs, x * DPR, y * DPR);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(img, -d / 2, -d / 2, d, d);
+  }
+
+  function drawGround() {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(140,110,40,.38)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(W * .06, groundY + .5);
+    ctx.lineTo(W * .94, groundY + .5);
+    ctx.stroke();
+  }
+
+  function drawTrunk(p) {
+    const th = trunkH + S * .06, wb = S * .125, wt = S * .06, N = 18;
+    const L = [], R = [];
+    let tipX = cx, tipYY = groundY, tipW = wb;
+    for (let i = 0; i <= N; i++) {
+      const f = i / N * p;
+      const w = wb + (wt - wb) * f;
+      const y = groundY - th * f;
+      const dx = Math.sin(f * Math.PI * 1.2) * S * .012;
+      L.push([cx + dx - w / 2, y]); R.push([cx + dx + w / 2, y]);
+      tipX = cx + dx; tipYY = y; tipW = w;
+    }
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalAlpha = 1;
+    const gr = ctx.createLinearGradient(cx - wb / 2, 0, cx + wb / 2, 0);
+    gr.addColorStop(0, '#0a3d35'); gr.addColorStop(.45, '#1f8a72');
+    gr.addColorStop(.72, '#166655'); gr.addColorStop(1, '#082f29');
+    ctx.fillStyle = gr;
+    ctx.shadowColor = 'rgba(40,220,170,.28)';
+    ctx.shadowBlur = 16 * DPR;
+    ctx.beginPath();
+    ctx.moveTo(L[0][0], L[0][1]);
+    for (let i = 1; i < L.length; i++) ctx.lineTo(L[i][0], L[i][1]);
+    for (let i = R.length - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(tipX, tipYY, tipW / 2, tipW * .28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(120,230,200,.16)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - wb * .05, groundY);
+    ctx.lineTo(tipX - tipW * .05, tipYY);
+    ctx.stroke();
+  }
+
+  function drawTree(now) {
+    const p = easeInOut(clamp((now - trunkStart) / TRUNK_DUR));
+    if (p > 0) drawTrunk(p);
+
+    const bt = now - bloomStart;
+    if (bt <= 0) return;
+    const ga = easeInOut(clamp(bt / 3.2));
+    const pl = 1 + Math.sin(now * 1.3) * .08 + pulse * .35;
+
+    // resplandor exterior
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const gy = heartTop + C[1] * S;
+    ctx.globalCompositeOperation = 'lighter';
+    const og = ctx.createRadialGradient(cx, gy, S * .1, cx, gy, S * .95);
+    og.addColorStop(0, 'rgba(255,180,30,.30)');
+    og.addColorStop(1, 'rgba(255,160,20,0)');
+    ctx.globalAlpha = clamp(ga * pl);
+    ctx.fillStyle = og;
+    ctx.fillRect(cx - S, gy - S, S * 2, S * 2);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // relleno dorado del corazón
+    ctx.globalAlpha = ga * .55;
+    ctx.drawImage(heartLayer, cx - S / 2 - layerPad, heartTop - layerPad, layerW, layerH);
+
+    // flores
+    for (let i = 0; i < flowers.length; i++) {
+      const f = flowers[i];
+      const local = (bt - f.delay) / .9;
+      if (local <= 0) continue;
+      const sc = easeOutBack(Math.min(1, local));
+      const x = cx + f.nx * S + Math.sin(now * f.sp + f.ph) * S * .004;
+      const y = heartTop + f.ny * S + Math.cos(now * f.sp * .8 + f.ph) * S * .004;
+      const d = f.size * S * sc * (1 + Math.sin(now * 1.6 + f.ph) * .03 + pulse * .07) * K_FLOWER;
+      blit(f.img, x, y, d, f.rot + Math.sin(now * .5 + f.ph) * .05, f.alpha);
+    }
+
+    // destellos
+    if (ga > .6) {
+      for (let i = 0; i < sparkles.length; i++) {
+        const s = sparkles[i];
+        const tw = Math.max(0, Math.sin(now * s.sp + s.ph));
+        if (tw < .05) continue;
+        const d = s.size * S * (.5 + .5 * tw) * K_SPARK;
+        blit(SPARK, cx + s.nx * S, heartTop + s.ny * S, d, 0, tw * .9 * ga);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- Bucle principal ---------- */
+  let last = performance.now() / 1000, fallAcc = 0, ambAcc = 0;
+
+  function frame(ts) {
+    const now = ts / 1000;
+    const dt = Math.min(.05, now - last); last = now;
+    pulse *= Math.pow(.06, dt);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    drawGround();
+
+    if (phase !== 'intro') drawTree(now);
+
+    // flores que caen suavemente bajo la línea del suelo
+    ambAcc += dt;
+    if (ambAcc > (calm ? 3 : 1.6)) {
+      ambAcc = 0;
+      addPart({
+        mode: 'ambient', x: rand(W * .12, W * .88),
+        y: groundY + rand(20, (H - groundY) * .7),
+        vy: rand(6, 14), vx: 0, rot: rand(0, 6.28), vr: rand(-.5, .5),
+        age: 0, life: rand(6, 9), ph: rand(0, 6.28),
+        img: flowerImg(), k: K_FLOWER, size: rand(14, 26)
+      });
+    }
+    // pétalos que se desprenden del árbol
+    if (phase === 'live' && !calm) {
+      fallAcc += dt;
+      if (fallAcc > .55) {
+        fallAcc = 0;
+        const f = flowers[Math.floor(rand(0, flowers.length))];
+        addPart({
+          mode: 'fall', x: cx + f.nx * S, y: heartTop + f.ny * S,
+          vy: rand(28, 48), vx: 0, rot: f.rot, vr: rand(-1, 1),
+          age: 0, life: 20, ph: rand(0, 6.28), a0: rand(.75, 1),
+          img: f.img, k: K_FLOWER, size: f.size * S * rand(.6, .85)
+        });
+      }
+    }
+
+    stepParticles(dt, now);
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- Tarjetas ---------- */
+  let cardIdx = 0, side = 0, hideT = 0, autoT = 0, lastCard = 0;
+
+  function showCard() {
+    lastCard = performance.now();
+    card.classList.remove('show');
+    void card.offsetWidth;
+    card.textContent = CARDS[cardIdx++ % CARDS.length];
+    side ^= 1;
+    const gap = S * .02;
+    const top = Math.max(80, heartTop + S * (.06 + Math.random() * .22));
+    card.style.top = top + 'px';
+    if (side) {
+      const left = Math.min(cx + gap, W - 140);
+      card.style.left = left + 'px'; card.style.right = 'auto';
+      card.style.maxWidth = Math.max(130, Math.min(220, W - left - 14)) + 'px';
+    } else {
+      const right = W - (cx - gap);
+      card.style.right = right + 'px'; card.style.left = 'auto';
+      card.style.maxWidth = Math.max(130, Math.min(220, W - right - 14)) + 'px';
+    }
+    card.classList.add('show');
+    clearTimeout(hideT);
+    hideT = setTimeout(() => card.classList.remove('show'), 5800);
+  }
+
+  /* ---------- Texto que se escribe ---------- */
+  async function typeLoop() {
+    let i = 0;
+    for (;;) {
+      const chars = Array.from(TYPED[i++ % TYPED.length]);
+      tt.textContent = '';
+      typedEl.classList.add('on');
+      for (let k = 1; k <= chars.length; k++) {
+        tt.textContent = chars.slice(0, k).join('');
+        await sleep(calm ? 15 : rand(45, 95));
+      }
+      await sleep(3000);
+      typedEl.classList.remove('on');
+      await sleep(900);
+    }
+  }
+
+  /* ---------- Interacción ---------- */
+  let taps = 0;
+
+  function start() {
+    if (phase !== 'intro') return;
+    phase = 'grow';
+    const now = performance.now() / 1000;
+    const r = seed.getBoundingClientRect();
+    const dx = cx - (r.left + r.width / 2), dy = groundY - (r.top + r.height / 2);
+    seed.style.animation = 'none';
+    seed.style.transition = 'transform 1s cubic-bezier(.5,0,.8,.6), opacity .5s ease .6s';
+    seed.style.transform = `translate(${dx}px, ${dy}px) scale(.25)`;
+    seed.style.opacity = '0';
+    startBtn.classList.add('go');
+    startBtn.style.pointerEvents = 'none';
+
+    trunkStart = now + .95;
+    bloomStart = trunkStart + TRUNK_DUR * .8;
+
+    setTimeout(() => {
+      for (let i = 0; i < 6; i++) {
+        addPart({
+          mode: 'burst', x: cx, y: groundY,
+          vx: rand(-90, 90), vy: rand(-140, -40), rot: 0, vr: 0,
+          age: 0, life: rand(.9, 1.6), ph: rand(0, 6.28),
+          img: SPARK, k: K_SPARK, size: rand(14, 24)
+        });
+      }
+    }, 950);
+    setTimeout(() => { startBtn.hidden = true; }, 1700);
+
+    // Cuando el árbol ya floreció: texto, tarjeta y pista
+    setTimeout(() => {
+      phase = 'live';
+      typeLoop();
+      showCard();
+      autoT = setInterval(showCard, 8000);
+      tapHint.classList.add('on');
+    }, (bloomStart - now + 2.6) * 1000);
+  }
+
+  startBtn.addEventListener('click', start);
+
+  window.addEventListener('pointerdown', e => {
+    if (phase === 'intro' || e.target === startBtn || startBtn.contains(e.target)) return;
+    if (performance.now() / 1000 < trunkStart) return;
+    burst(e.clientX, e.clientY);
+    pulse = 1;
+    taps++;
+    if (phase === 'live') {
+      if (performance.now() - lastCard > 2500) {
+        showCard();
+        clearInterval(autoT);
+        autoT = setInterval(showCard, 8000);
+      }
+      if (taps >= 5) tapHint.classList.remove('on');
+    }
+  });
+
+  let rz;
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(layout, 120); });
+
+  layout();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
